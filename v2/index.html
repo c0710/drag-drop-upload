@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>upload</title>
+    <style>
+        #drop-area {
+            background-color: #cc8877;
+        }
+        .area {
+            width: 200px;
+            height: 200px;
+            border: 1px solid #000;
+            background-color: #eee;
+            float: left;
+            margin-right: 100px;
+        }
+        .close-btn{
+            cursor: pointer;
+        }
+        .close-btn:after{
+            float: right;
+            content: 'X';
+            color: red;
+        }
+        #fileList{
+            width: 95%;
+        }
+        .process-bar{
+            position: relative;
+            margin: 0 10px 0 10px;
+            width: 198px;
+            height: 18px;
+            display: none;
+            text-align: center;
+            line-height: 20px;
+            color: #6dbfff;
+            border-radius: 3px;
+            border: 1px solid #1483d8;
+            background: #fff;
+        }
+        .success .process-bar,
+        .uploading .process-bar{
+            display: inline-block;
+        }
+        .process-bar .process-text{
+            position: relative;
+            z-index: 1;
+        }
+        .process-bar .process-rate{
+            position: absolute;
+            width: 0;
+            height: 100%;
+            left: 0;
+
+    </style>
+</head>
+<body>
+    <div class="area" id="drop-area" ondrop="drop_hander(event)" ondragover = "dragover_hander(event)"></div>
+
+    <div id="fileList" class="file-list"></div><!--显示待上传文件列表-->
+    <button id="submit">上传</button><!--上传按钮-->
+<script>
+    let filesSet = []; //文件保存数组
+    let fileList = document.querySelector('#fileList'); //获取显示文件列表DOM
+
+    /**
+     * 创建一个新的空白的文档片段frag
+     * 用于附加多个待上传文件的DOM,可减小回流
+     * https://developer.mozilla.org/zh-CN/docs/Web/API/Document/createDocumentFragment
+     */
+    let frag = document.createDocumentFragment();
+    let barDom = createProccessBar(); //创建进度条DOM
+    let submit = document.getElementById("submit") //获取提交按钮
+
+    // 拖放完成
+    function drop(event) {
+        event.preventDefault();
+        var files = event.dataTransfer.files
+        var formData = new FormData()
+
+        for (var i = 0; i < files.length; i++) {
+            formData.append('files', files[i])
+        }
+        var request = new XMLHttpRequest()
+        request.open('POST', '/uploadFile')
+        request.send(formData)
+    }
+    function drop_hander(event) {
+        console.log('..')
+        event.preventDefault()
+         var files = event.dataTransfer.files
+
+        for(var file of files) {
+            //创建文件信息显示DOM,并保存在file对象的element属性中，用于后续操作
+            file.element = createFileDom(file, filesSet.length)
+            //复制进度条DOM,并保存在file对象的processBar属性中，用于后续操作
+            file.processBar = filesSet.length?barDom.cloneNode(true):barDom;
+            //将进度条添加至文件信息显示DOM中
+            file.element.appendChild(file.processBar);
+            //file文件对象添加到文件保存数组
+            filesSet.push(file);
+            //创建文件信息显示DOM添加至文档片段frag
+            frag.appendChild(file.element);
+        }
+        //将文件列表添加至显示文件列表的div
+        fileList.appendChild(frag)
+    }
+    // 拖动到放置区域时
+    function dragover_hander(event) {
+        event.preventDefault();
+    }
+
+    /**
+     * 创建进度条DOM,
+     * 进度条DOM结构固定，可使用clone(true)进行复制
+     * @return {[type]} [description]
+     */
+    function createProccessBar() {
+        let bar =  document.createElement("span");
+        let rate = document.createElement("span");
+        let text = document.createElement("span");
+        bar.className = "process-bar";
+        rate.className = "process-rate";
+        text.className = "process-text";
+        text.innerText="0%";
+        bar.appendChild(text);
+        bar.appendChild(rate);
+        return bar;
+    }
+
+    /**
+     * 创建文件信息显示DOM
+     * file  文件对象，用于获取文件信息
+     * index 文件对象在数组中的索引，用于删除
+     */
+    function createFileDom (file, index) {
+        let p = document.createElement('p');
+        //file.name属性可以获得文件名称
+        //有兴趣的童鞋，可以使用for...in循环查看一下file对象的其它属性值
+        let text = document.createTextNode(file.name);
+        let span = document.createElement("span");
+        span.setAttribute('index', index); //索引添加至按钮的index属性
+        span.className = 'close-btn';
+        p.appendChild(text);
+        p.appendChild(span);
+
+        return p; //返回文件信息显示DOM
+    }
+
+    //通过事件代理，监听移除或中止上传
+    fileList.addEventListener('click', (evt)=>{
+        let index = evt.target.getAttribute('index'); //获得index属性值
+        if (index) { //存在index属性值，表示点击了删除按钮
+
+            if (filesSet[index].unloading && filesSet[index].req) { //文件已经上传中
+                filesSet[index].req.abort(); //中止上传
+                filesSet[index].unloading = false;    //将上传中的状态设置为false
+            } else { //未开始上传
+                filesSet[index].element.remove(); //移除DOM
+                filesSet[index].element = null; //释放对DOM的引用
+                filesSet[index].processBar = null;//释放对DOM的引用
+                delete filesSet[index];//删除文件数组中对应的元素
+            }
+
+        }
+    })
+
+    submit.addEventListener('click',function(){// 为上传按钮绑定事件
+
+        //这里使用for...in循环,正好可以避免对数组稀疏元素的遍历
+        for(let key in filesSet){
+            //如果正在上传中或已经上传完成，不再上传
+            if (filesSet[key].unloading || filesSet[key].uploaded) continue;
+            filesSet[key].unloading = true; //标记开始上传
+
+            //创建一个文件上传的Promise，并设置成功及失败的回调
+            initUpload(filesSet[key]).then(file => {
+                //上传成功
+                file.element.className = "success"; //UI显示成功信息
+                file.uploaded = true; //标记上传成功
+            }).catch((file, err) => {
+                file.element.className = "error"; //UI显示失败信息
+                //取消开始上传标记，点击上传按钮将尝试再次上传
+                filesSet[key].unloading = false;
+            })
+        }
+    })
+
+    /**
+     * 返回一个文件上传的Promise实例
+     * @param  {[type]} file 要上传的文件
+     */
+    function initUpload(file){
+
+        return new Promise((res, rej) => {
+            let formData = new FormData();//声明一个FormData实例
+            let req = new XMLHttpRequest();//创建XHR实例
+            let reta = file.processBar.querySelector('.process-rate');//获得进度条DOM
+            let text = file.processBar.querySelector('.process-text');//获得进度文本DOM
+            let pre;//保存上传百分比
+            //监听数据传输进行中
+            req.upload.onprogress =function(data){
+                pre = (data.loaded/data.total*100).toFixed(2);//计算百分比
+                reta.style.width = pre +'%';//修改进度条
+                text.innerText = pre +'%' ;//修改进度条文本
+            }
+            //监听请求完成
+            req.onreadystatechange = function () {
+                if (req.readyState !==4 ) return ;
+                if (req.status === 200 ){
+                    //完成，执行成功回调
+                    res(file, req)
+                } else {
+                    //失败，执行失败回调
+                    rej(file, req)
+                }
+            }
+            formData.append('file',file); //使用append方法添加文件到file键
+            req.open('POST', '/uploadFile'); //初始化请求
+            req.send(formData); //发送请求
+            file.req = req; //保存req对象，用于中止请求
+            //形如显示上传进度
+            file.element.className = "uploading"
+        })
+    }
+</script>
+</body>
+</html>
