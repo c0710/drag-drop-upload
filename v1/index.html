@@ -3,8 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <title>upload</title>
+    <style>
+        #drop-area {
+            background-color: #cc8877;
+            /*width: 200px;*/
+            /*height: 200px;*/
+            /*border: 1px solid #000;*/
+            /*background-color: #f87;*/
+        }
+        .area {
+            width: 200px;
+            height: 200px;
+            border: 1px solid #000;
+            background-color: #eee;
+            float: left;
+            margin-right: 100px;
+        }
+    </style>
 </head>
 <body>
-<p>hello</p>
+<div class="area" id="drop-area" ondrop="drop(event)" ondragover = "dragover_hander(event)"></div>
+<div class="area">
+    <span id="hello1" draggable="true">hello1</span>
+    <span id="hello2" draggable="true">hello2</span>
+</div>
+
+<p id="demo"></p>
+<script>
+    document.addEventListener("dragstart", function(event) {
+
+        //dataTransfer.setData()方法设置数据类型和拖动的数据
+        event.dataTransfer.setData("Text", event.target.id);
+        // 拖动 p 元素时输出一些文本
+        document.getElementById("demo").innerHTML = "开始拖动 "+event.target.id+" 元素.";
+        //修改拖动元素的透明度
+        event.target.style.opacity = "0.4";
+    });
+
+    // 拖放完成
+    function drop(event) {
+        event.preventDefault();
+        var files = event.dataTransfer.files
+        var formData = new FormData()
+
+        for (var i = 0; i < files.length; i++) {
+            formData.append('files', files[i])
+        }
+
+        var request = new XMLHttpRequest()
+        request.open('POST', '/uploadFile')
+        request.send(formData)
+    }
+    // 拖动到放置区域时
+    function dragover_hander(event) {
+        event.preventDefault();
+        console.log('dragover_hander')
+    }
+</script>
 </body>
 </html>
